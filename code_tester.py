@@ -6,13 +6,11 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import tkinter as tk
 from klogging import *   # custom logger
+import os
 
-###################################################################################################
-# TYPE CHECKING + TESTCASE GENERATION
-###################################################################################################
+# ==================== TYPE CHECKING + TESTCASE GENERATION ====================
 
 def checktype(data):
-    """Recursively determine the type structure of given data."""
     if isinstance(data, bool):
         return "bool"
     elif isinstance(data, int):
@@ -30,7 +28,6 @@ def checktype(data):
 
 
 def genereate_spefic_testcase_element(n, i):
-    """Generate one testcase element with fixed digit/length constraints."""
     if i == "bool":
         return bool(random.randint(0, 1))
     elif i == "int":
@@ -40,22 +37,24 @@ def genereate_spefic_testcase_element(n, i):
     elif i == "str":
         return "".join(random.choice(string.ascii_letters) for _ in range(n))
     elif isinstance(i, list):
-        return [genereate_spefic_testcase_element(n, j) for j in i]
+        return [genereate_spefic_testcase_element(sub_n, j) for sub_n, j in zip(n, i)]
     elif isinstance(i, tuple):
-        return tuple(genereate_spefic_testcase_element(n, j) for j in i)
+        return tuple(genereate_spefic_testcase_element(sub_n, j) for sub_n, j in zip(n, i))
     elif isinstance(i, dict):
-        return {k: genereate_spefic_testcase_element(n, v) for k, v in i.items()}
+        return {k: genereate_spefic_testcase_element(n[k], v) for k, v in i.items()}
 
 
 def generate_specific_testcase(example, range_):
-    """Generate a testcase based on exact digit/length constraints."""
     test_casetype = [checktype(i) for i in example]
-    test_case = [genereate_spefic_testcase_element(range_[i], test_casetype[i]) for i in range(len(test_casetype))]
+    test_case = [
+        genereate_spefic_testcase_element(range_[i], test_casetype[i])
+        for i in range(len(test_casetype))
+    ]
     return tuple(test_case)
 
+# ==================== RANDOM TESTCASE GENERATION ====================
 
 def genereate_random_testcase_element(i, range_):
-    """Generate one testcase element within a random range."""
     if i == "bool":
         return bool(random.randint(0, 1))
     elif i == "int":
@@ -76,31 +75,19 @@ def genereate_random_testcase_element(i, range_):
 
 
 def generate_random_testcase(example, range_):
-    """Generate a testcase with randomized digit/length constraints."""
     test_casetype = [checktype(i) for i in example]
     test_case = [genereate_random_testcase_element(test_casetype[i], range_[i]) for i in range(len(test_casetype))]
     return tuple(test_case)
 
-
-###################################################################################################
-# BENCHMARKING + LOGGING
-###################################################################################################
+# ==================== BENCHMARKING ====================
 
 def average_time(func, example, range_, iterations=10, type="random",
-                 file_to_log="benchmark_logging.txt", max_size=1048576):
-    """
-    Benchmark execution time of a function across multiple runs.
+                 file_to_log="benchmark_logging.txt", max_size=1073741824):
 
-    Logs details using custom klogging:
-    - Function name
-    - Arguments
-    - Return value
-    - Execution time
-    - Success / Error
-    """
     record_time = []
+    total_time = []
 
-    benchmark_logger = logger("benchmark_logger", max_size=1073741824, file_to_log=file_to_log)
+    benchmark_logger = logger("benchmark_logger", max_size, file_to_log=file_to_log)
 
     for i in range(iterations):
         test_case = (generate_specific_testcase(example, range_) if type == "specific"
@@ -113,7 +100,9 @@ def average_time(func, example, range_, iterations=10, type="random",
             end_time = time.time()
 
             exec_time = float(end_time - start_time)
+
             record_time.append(exec_time)
+            total_time.append(exec_time)
 
             benchmark_logger.log_info(
                 msg="executed successfully",
@@ -135,70 +124,97 @@ def average_time(func, example, range_, iterations=10, type="random",
                 arguments=str(test_case),
                 return_value=return_val
             )
-    mean_time=sum(record_time) / len(record_time) if record_time else None
-    variance=0
-    
-    for i in record_time:
-        variance+=(i-mean_time)**2
-    mean_deviation=math.sqrt(variance/len(record_time))
 
-    return {"Average time":sum(record_time) / len(record_time) if record_time else None,
-            "Mean deviation":mean_deviation,
-            "Minimum time":min(record_time),
-            "Max time":max(record_time)}
+    mean_time = sum(record_time) / len(record_time) if record_time else None
+    variance = sum((i - mean_time) ** 2 for i in record_time) if record_time else 0
+    mean_deviation = math.sqrt(variance / len(record_time)) if record_time else None
 
-###################################################################################################
-# ERROR REVIEW + HELP
-###################################################################################################
+    # Console Report
+    print()
+    print("----- BENCHMARKING REPORT -----")
+    print(f"""Average time: {mean_time}
+Mean deviation: {mean_deviation}
+Minimum time: {min(record_time) if record_time else None}
+Maximum time: {max(record_time) if record_time else None}
+Total time: {sum(total_time)}
+Iterations: {len(record_time)}""")
+    print("-------------------------------")
+    print()
 
-def show_error(write=False):
-    """Show all logged errors from benchmark log."""
+    return {
+        "Average time": mean_time,
+        "Mean deviation": mean_deviation,
+        "Minimum time": min(record_time) if record_time else None,
+        "Max time": max(record_time) if record_time else None,
+        "Total time": sum(total_time),
+        "Iterations": len(record_time)
+    }
+
+# ==================== LOG VIEWING ====================
+
+def show_error(file, log_file="benchmark_logging.txt", write=False):
     if write:
-        # Future: option to export error logs to a file
-        pass
+        if os.path.exists(log_file):
+            with open(log_file, "r") as master_file, open(file, "w") as student_file:
+                for line in master_file:
+                    if "ERROR" in line:
+                        student_file.write(line)
+            print(f"Errors written to {file}")
+        else:
+            print("Log file does not exist.")
     else:
-        logger.show_all_error(log_file="benchmark_logging.txt")     # rotate file to look for all the logs
+        logger.show_all_error(log_file)
 
-def show_warning(write=False):
-    if write:
-        pass
-    else:
-        logger.show_all_warning(log_file="benchmark_logging.txt")        # rotate file to look for all the logs
 
-def show_info(write=False):
+def show_info(file, log_file="benchmark_logging.txt", write=False):
     if write:
-        pass
+        if os.path.exists(log_file):
+            with open(log_file, "r") as master_file, open(file, "w") as student_file:
+                for line in master_file:
+                    if "INFO" in line:
+                        student_file.write(line)
+            print(f"Infos written to {file}")
+        else:
+            print("Log file does not exist.")
     else:
-        logger.show_all_info(log_file="benchmark_logging.txt")        # rotate file to look for all the logs
+        logger.show_all_info(log_file)
+
+
+def show_warning(file, log_file="benchmark_logging.txt", write=False):
+    if write:
+        if os.path.exists(log_file):
+            with open(log_file, "r") as master_file, open(file, "w") as student_file:
+                for line in master_file:
+                    if "WARNING" in line:
+                        student_file.write(line)
+            print(f"Warnings written to {file}")
+        else:
+            print("Log file does not exist.")
+    else:
+        logger.show_all_warning(log_file)
+
+# ==================== HELP ====================
 
 def help():
-    """Display usage guide for testcase generator + benchmarking tool."""
     print(r"""
-🔹 Benchmarking + Testcase Generator Help 🔹
-Provides tools to:
-- Generate random/specific testcases
-- Benchmark execution time
-- Log execution details
-- Review error history
-
-📌 Main Functions:
-  checktype(data) → infer type structure
-  generate_specific_testcase(example, range_)
-  generate_random_testcase(example, range_)
-  average_time(func, example, range_, iterations, type, file_to_log, max_size)
-  show_error(write=False)
-
-👉 Call help() anytime to show this guide.
+🔹 Benchmarking Toolkit 🔹
+- Generate testcases (specific/random)
+- Benchmark execution times
+- Log execution results
+- Review INFO, WARNING, ERROR logs
 """)
 
-
-###################################################################################################
-# SAMPLE USAGE
-###################################################################################################
-
-def func(a, b, c=[1, 2]):
-    print(a / b)
+# ==================== SAMPLE USAGE ====================
 
 if __name__ == "__main__":
-    print(average_time(func, [1, 2, [1, 2]], [1, 1, 3, 3], 10, "specific"))
-    show_error()
+    def func_sort(lst):
+        return sorted(lst)
+
+    example = [[random.randint(0, 1000) for _ in range(500)]]
+    ranges = [[3] * 500]   # 3-digit integers
+
+    print("Benchmarking sort function...")
+    average_time(func_sort, example, ranges, iterations=10, type="specific")
+
+    show_info("benchmark_info.txt")
+    show_error("benchmark_errors.txt")
