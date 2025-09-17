@@ -1,5 +1,6 @@
 import random
 import string
+import math
 import time
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -134,9 +135,17 @@ def average_time(func, example, range_, iterations=10, type="random",
                 arguments=str(test_case),
                 return_value=return_val
             )
+    mean_time=sum(record_time) / len(record_time) if record_time else None
+    variance=0
+    
+    for i in record_time:
+        variance+=(i-mean_time)**2
+    mean_deviation=math.sqrt(variance/len(record_time))
 
-    return sum(record_time) / len(record_time) if record_time else None
-
+    return {"Average time":sum(record_time) / len(record_time) if record_time else None,
+            "Mean deviation":mean_deviation,
+            "Minimum time":min(record_time),
+            "Max time":max(record_time)}
 
 ###################################################################################################
 # ERROR REVIEW + HELP
@@ -148,8 +157,19 @@ def show_error(write=False):
         # Future: option to export error logs to a file
         pass
     else:
-        logger.show_all_error(log_file="benchmark_logging.txt")
+        logger.show_all_error(log_file="benchmark_logging.txt")     # rotate file to look for all the logs
 
+def show_warning(write=False):
+    if write:
+        pass
+    else:
+        logger.show_all_warning(log_file="benchmark_logging.txt")        # rotate file to look for all the logs
+
+def show_info(write=False):
+    if write:
+        pass
+    else:
+        logger.show_all_info(log_file="benchmark_logging.txt")        # rotate file to look for all the logs
 
 def help():
     """Display usage guide for testcase generator + benchmarking tool."""
@@ -178,7 +198,6 @@ Provides tools to:
 
 def func(a, b, c=[1, 2]):
     print(a / b)
-
 
 if __name__ == "__main__":
     print(average_time(func, [1, 2, [1, 2]], [1, 1, 3, 3], 10, "specific"))
