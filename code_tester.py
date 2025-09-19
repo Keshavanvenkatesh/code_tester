@@ -5,10 +5,11 @@ import time
 from datetime import datetime
 import matplotlib.pyplot as plt
 import tkinter as tk
-from klogging_new import *   # custom logger
+from klogging import *   # custom logger
 import pickle 
 import csv
 import ast
+from multiprocessing import Pool
 
 ###################################################################################################
 # TYPE CHECKING + TESTCASE GENERATION
@@ -49,7 +50,6 @@ def genereate_spefic_testcase_element(n, i):
     elif isinstance(i, dict):
         return {k: genereate_spefic_testcase_element(n[k], v) for k, v in i.items()}
 
-
 def generate_specific_testcase(example, range_):
     
     test_casetype = [checktype(i) for i in example]
@@ -58,7 +58,6 @@ def generate_specific_testcase(example, range_):
         for i in range(len(test_casetype))
     ]
     return tuple(test_case)
-
 
 ###################################################################################################
 # RANDOM USAGE
@@ -76,7 +75,14 @@ def genereate_random_testcase_element(i, range_):
         return random.uniform(10 ** (digits - 1), 10 ** digits)
     elif i == "str":
         length = random.randint(*range_)
-        return "".join(random.choice(string.ascii_letters) for _ in range(length))
+        forbidden = ["bool", "int", "float", "str"]
+
+        while True:
+            sentence = "".join(random.choice(string.ascii_letters) for _ in range(length))
+            # Check if any forbidden keyword appears as a substring
+            if not any(word in sentence for word in forbidden):
+                return sentence
+
     elif isinstance(i, list):
         return [genereate_random_testcase_element(j, sub_range) for j, sub_range in zip(i, range_)]
     elif isinstance(i, tuple):
@@ -145,17 +151,6 @@ def average_time(func, example, range_, iterations=10, type="random",
         variance+=(i-mean_time)**2
     mean_deviation=math.sqrt(variance/len(record_time))
 
-    print()
-    print("----- BENCHMARKING REPORT -----")
-    print(f"""Average time: {mean_time}
-Mean deviation: {mean_deviation}
-Minimum time: {min(record_time) if record_time else None}
-Maximum time: {max(record_time) if record_time else None}
-Total time: {sum(total_time)}
-Iterations: {len(record_time)}""")
-    print("-------------------------------")
-    print()
-
     return {"Average time":sum(record_time) / len(record_time) if record_time else None,
 "Mean deviation":mean_deviation,
 "Minimum time":min(record_time),
@@ -163,11 +158,31 @@ Iterations: {len(record_time)}""")
 "Total time":sum(total_time),
 "Iterations":len(record_time)}
 
+def benchmark(func, example, range_, iterations=10, type="random",
+              file_to_log="benchmark_logging.txt", max_size=1073741824, multi_process=5):
+
+    args_list = [
+        (func, example, range_, iterations, type, file_to_log, max_size)
+        for _ in range(multi_process)
+    ]
+
+    with Pool(processes=multi_process) as pool:
+        results = pool.starmap(average_time, args_list)
+    pretty_print(results)
+
+def pretty_print(results):
+    for i, result in enumerate(results):
+        print(f"---------- Process {i+1} ----------")
+        for key, value in result.items():
+            print(f"{key}: {value}")
+        print("-------------------------------")
+        print()
+
 ###################################################################################################
 # LOGGING INTERFACE
 ###################################################################################################
 
-def show_error(file, log_file="benchmark_logging.txt", write=False):
+def show_error(file="", log_file="benchmark_logging.txt", write=False):
     if write:
         if os.path.exists(log_file):
             with open(log_file, "r") as master_file, open(file, "w") as student_file:
@@ -180,7 +195,7 @@ def show_error(file, log_file="benchmark_logging.txt", write=False):
     else:
         logger.show_all_error(log_file)
 
-def show_info(file, log_file="benchmark_logging.txt", write=False):
+def show_info(file="", log_file="benchmark_logging.txt", write=False):
     if write:
         if os.path.exists(log_file):
             with open(log_file, "r") as master_file, open(file, "w") as student_file:
@@ -193,7 +208,7 @@ def show_info(file, log_file="benchmark_logging.txt", write=False):
     else:
         logger.show_all_info(log_file)
 
-def show_warning(file, log_file="benchmark_logging.txt", write=False):
+def show_warning(file="", log_file="benchmark_logging.txt", write=False):
     if write:
         if os.path.exists(log_file):
             with open(log_file, "r") as master_file, open(file, "w") as student_file:
@@ -357,8 +372,9 @@ def custom_test(func, input_=None, output_=None, file=None,
                         return_value=return_val
                     )
                 i += 1
-
-
+    else:
+        raise ValueError("Invalid file_type. Use None, 'csv', or 'binary'.")
+    
 # ==================== HELP ====================
 
 def help():
